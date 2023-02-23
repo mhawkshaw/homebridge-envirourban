@@ -1,15 +1,101 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "EnviroUrbanAirQuality",
   "pluginType": "platform",
   "singular": true,
+  "headerDisplay": "The Pimoroni Enviro Urban Sensor provides environmental data.",
   "schema": {
     "type": "object",
     "properties": {
-      "name": {
-        "title": "Name",
+      "mqttbroker": {
+        "title": "MQTT Broker",
         "type": "string",
         "required": true,
-        "default": "Example Dynamic Platform"
+        "format": "uri",
+        "default": "mqtt://127.0.0.1:1883"
+      },
+      "username": {
+        "title": "MQTT Broker username",
+        "type": "string",
+        "required": false,
+        "default": ""
+      },
+      "password": {
+        "title": "MQTT Broker password",
+        "type": "string",
+        "required": false,
+        "default": ""
+      },
+      "devices": {
+        "title": "Enviro Urban Devices",
+        "type": "array",
+        "uniqueItems": true,
+        "required": true,
+        "items": {
+          "title": "Devices",
+          "type": "object",
+          "required": true,
+          "properties": {
+            "displayName": {
+              "title": "Enviro Urban Display Name",
+              "type": "string",
+              "required": true,
+              "default": ""
+            },
+            "serial": {
+              "title": "Enviro Urban Serial Number",
+              "type": "string",
+              "required": true,
+             "default": "1234567890"
+            },
+            "topic": {
+              "title": "MQTT Topic",
+              "type": "string",
+              "required": true,
+              "format": "string",
+              "default": "enviro/my-air-quality"
+            }
+          }
+        }
+      },
+      "excellent": {
+        "title": "The upper value for PM2.5 air quality considered to be excellent (in micrograms per cubic metre)",
+        "type": "integer",
+        "required": true,
+        "minimum": 0,
+        "maximum": 1000,
+        "default": 10
+      },
+      "good": {
+        "title": "The upper value for PM2.5 air quality considered to be good (in micrograms per cubic metre)",
+        "type": "integer",
+        "required": true,
+        "minimum": 0,
+        "maximum": 1000,
+        "default": 20
+      },
+      "fair": {
+        "title": "The upper value for PM2.5 air quality considered to be fair (in micrograms per cubic metre)",
+        "type": "integer",
+        "required": true,
+        "minimum": 0,
+        "maximum": 1000,
+        "default": 25
+      },
+      "inferior": {
+        "title": "The upper value for PM2.5 air quality considered to be inferior (in micrograms per cubic metre)",
+        "type": "integer",
+        "required": true,
+        "minimum": 0,
+        "maximum": 1000,
+        "default": 50
+      },
+      "poor": {
+        "title": "The lowest value for PM2.5 air quality considered to be poor (in micrograms per cubic metre). Anything above this is included.",
+        "type": "integer",
+        "required": true,
+        "minimum": 0,
+        "maximum": 1000,
+        "default": 50
       }
     }
   }

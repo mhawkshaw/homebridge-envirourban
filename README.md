@@ -6,164 +6,91 @@
 </p>
 
 
-# Homebridge Platform Plugin Template
+# Pimoroni Enviro Urban Homebridge Plug-in
 
-This is a template Homebridge platform plugin and can be used as a base to help you get started developing your own plugin.
+This Homebridge plug-in allows you to make the data available from the [Pimoroni Enviro Urban](https://learn.pimoroni.com/article/getting-started-with-enviro) device.
 
-This template should be used in conjunction with the [developer documentation](https://developers.homebridge.io/). A full list of all supported service types, and their characteristics is available on this site.
+## Setup MQTT broker
 
-## Clone As Template
+This Homebridge plug-in reads the data from an MQTT broker providing the JSON information, for example:
 
-Click the link below to create a new GitHub Repository using this template, or click the *Use This Template* button above.
+* {"readings": {"pressure": 997.99, "pm1": 0, "pm2_5": 4, "noise": 0.015, "humidity": 47.19, "temperature": 22.26, "pm10": 4, "voltage": 0.0}, "nickname": "my-air-quality", "model": "urban", "uid": "xxxxxxxxxxxxxx", "timestamp": "2023-02-23T21:45:09Z"}
 
-<span align="center">
+You can view the entries on your computer using an MQTT viewer, for example [MQTT Explorer](http://mqtt-explorer.com/)
 
-### [Create New Repository From Template](https://github.com/homebridge/homebridge-plugin-template/generate)
+You need to install an [MQTT broker](http://mosquitto.org/) on your machine, this can be any machine in your network, including the machine running Homebridge. Here are some instructions for popular distributions:
 
-</span>
+### Raspberry Pi / Ubuntu
 
-## Setup Development Environment
+In short, you just need to do the following:
 
-To develop Homebridge plugins you must have Node.js 12 or later installed, and a modern code editor such as [VS Code](https://code.visualstudio.com/). This plugin template uses [TypeScript](https://www.typescriptlang.org/) to make development easier and comes with pre-configured settings for [VS Code](https://code.visualstudio.com/) and ESLint. If you are using VS Code install these extensions:
+    sudo apt-get update
+    sudo apt-get install -y mosquitto mosquitto-clients
+    sudo systemctl enable mosquitto.service
 
-* [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
+### macOS
 
-## Install Development Dependencies
+Use [Homebrew](https://brew.sh/)
 
-Using a terminal, navigate to the project folder and run this command to install the development dependencies:
+    brew install mosquitto
 
-```
-npm install
-```
+### Windows
 
-## Update package.json
+Go to the (Mosquitto Download Page)[https://mosquitto.org/download/] and choose the right installer for your system.
 
-Open the [`package.json`](./package.json) and change the following attributes:
+### Enable authentication
 
-* `name` - this should be prefixed with `homebridge-` or `@username/homebridge-` and contain no spaces or special characters apart from a dashes
-* `displayName` - this is the "nice" name displayed in the Homebridge UI
-* `repository.url` - Link to your GitHub repo
-* `bugs.url` - Link to your GitHub repo issues page
+A quick search online will provide you with information on how to secure your installation. To help you, I've found the following links for the 
+[Raspberry Pi](https://randomnerdtutorials.com/how-to-install-mosquitto-broker-on-raspberry-pi/) and [Ubuntu](https://www.vultr.com/docs/install-mosquitto-mqtt-broker-on-ubuntu-20-04-server/)
 
-When you are ready to publish the plugin you should set `private` to false, or remove the attribute entirely.
+## Plug-in Installation
 
-## Update Plugin Defaults
+Follow the [homebridge installation instructions](https://www.npmjs.com/package/homebridge) if you haven't already.
 
-Open the [`src/settings.ts`](./src/settings.ts) file and change the default values:
+Install this plugin globally:
 
-* `PLATFORM_NAME` - Set this to be the name of your platform. This is the name of the platform that users will use to register the plugin in the Homebridge `config.json`.
-* `PLUGIN_NAME` - Set this to be the same name you set in the [`package.json`](./package.json) file. 
+    npm install -g homebridge-envirourban
 
-Open the [`config.schema.json`](./config.schema.json) file and change the following attribute:
+Add platform to `config.json`, for configuration see below.
 
-* `pluginAlias` - set this to match the `PLATFORM_NAME` you defined in the previous step.
+## Plug-in Configuration
 
-## Build Plugin
+The plug-in needs to know where to find the MQTT broker providing the JSON data (e.g. mqtt://127.0.0.1:1883) along with the serial number of the device to uniquely identify it (you can also use your Raspberry Pi identifier).
 
-TypeScript needs to be compiled into JavaScript before it can run. The following command will compile the contents of your [`src`](./src) directory and put the resulting code into the `dist` folder.
-
-```
-npm run build
-```
-
-## Link To Homebridge
-
-Run this command so your global install of Homebridge can discover the plugin in your development environment:
-
-```
-npm link
-```
-
-You can now start Homebridge, use the `-D` flag so you can see debug log messages in your plugin:
-
-```
-homebridge -D
-```
-
-## Watch For Changes and Build Automatically
-
-If you want to have your code compile automatically as you make changes, and restart Homebridge automatically between changes, you first need to add your plugin as a platform in `~/.homebridge/config.json`:
-```
+```json
 {
-...
-    "platforms": [
+  "platforms": [
+    {
+      "platform": "EnviroUrbanAirQuality",
+      "mqttbroker": "mqtt://127.0.0.1:1883",
+      "username": "",
+      "password": "",
+      "devices": [
         {
-            "name": "Config",
-            "port": 8581,
-            "platform": "config"
-        },
-        {
-            "name": "<PLUGIN_NAME>",
-            //... any other options, as listed in config.schema.json ...
-            "platform": "<PLATFORM_NAME>"
+          "displayName": "My Enviro Urban Sensor",
+          "serial": "1234567890",
+          "topic": "enviro/my-air-quality"
         }
-    ]
+      ],
+      "excellent": 10,
+      "good": 20,
+      "fair": 25,
+      "inferior": 50,
+      "poor": 50
+    }
+  ]
 }
-```
-
-and then you can run:
 
 ```
-npm run watch
-```
 
-This will launch an instance of Homebridge in debug mode which will restart every time you make a change to the source code. It will load the config stored in the default location under `~/.homebridge`. You may need to stop other running instances of Homebridge while using this command to prevent conflicts. You can adjust the Homebridge startup command in the [`nodemon.json`](./nodemon.json) file.
+The following settings are optional:
 
-## Customise Plugin
+- `username`: the MQTT broker username
+- `password`: the MQTT broker password
+- `excellent`: the upper value for PM2.5 air quality considered to be excellent (in micrograms per cubic metre). Default is 10.
+- `good`: the upper value for PM2.5 air quality considered to be good (in micrograms per cubic metre). Default is 20.
+- `fair`: the upper value for PM2.5 air quality considered to be fair (in micrograms per cubic metre). Default is 25.
+- `inferior`: the upper value for PM2.5 air quality considered to be inferior (in micrograms per cubic metre). Default is 50.
+- `poor`: the lowest value for PM2.5 air quality considered to be poor (in micrograms per cubic metre). Anything above this is considered to be poor. Default is 50.
 
-You can now start customising the plugin template to suit your requirements.
-
-* [`src/platform.ts`](./src/platform.ts) - this is where your device setup and discovery should go.
-* [`src/platformAccessory.ts`](./src/platformAccessory.ts) - this is where your accessory control logic should go, you can rename or create multiple instances of this file for each accessory type you need to implement as part of your platform plugin. You can refer to the [developer documentation](https://developers.homebridge.io/) to see what characteristics you need to implement for each service type.
-* [`config.schema.json`](./config.schema.json) - update the config schema to match the config you expect from the user. See the [Plugin Config Schema Documentation](https://developers.homebridge.io/#/config-schema).
-
-## Versioning Your Plugin
-
-Given a version number `MAJOR`.`MINOR`.`PATCH`, such as `1.4.3`, increment the:
-
-1. **MAJOR** version when you make breaking changes to your plugin,
-2. **MINOR** version when you add functionality in a backwards compatible manner, and
-3. **PATCH** version when you make backwards compatible bug fixes.
-
-You can use the `npm version` command to help you with this:
-
-```bash
-# major update / breaking changes
-npm version major
-
-# minor update / new features
-npm version update
-
-# patch / bugfixes
-npm version patch
-```
-
-## Publish Package
-
-When you are ready to publish your plugin to [npm](https://www.npmjs.com/), make sure you have removed the `private` attribute from the [`package.json`](./package.json) file then run:
-
-```
-npm publish
-```
-
-If you are publishing a scoped plugin, i.e. `@username/homebridge-xxx` you will need to add `--access=public` to command the first time you publish.
-
-#### Publishing Beta Versions
-
-You can publish *beta* versions of your plugin for other users to test before you release it to everyone.
-
-```bash
-# create a new pre-release version (eg. 2.1.0-beta.1)
-npm version prepatch --preid beta
-
-# publish to @beta
-npm publish --tag=beta
-```
-
-Users can then install the  *beta* version by appending `@beta` to the install command, for example:
-
-```
-sudo npm install -g homebridge-example-plugin@beta
-```
-
-
+If you have multiple Enviro Urban devices, then you can list them all in the config giving each one a unique name, MQTT topic and serial number.

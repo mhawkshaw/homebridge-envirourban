@@ -1,141 +1,208 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { Service, PlatformAccessory } from 'homebridge';
 
-import { ExampleHomebridgePlatform } from './platform';
+import { EnviroUrbanPlatform } from './platform';
+
+import { Client, connect } from 'mqtt';
+
+interface EnviroUrbanReadingsJson {
+  pressure: number;
+  pm1: number;
+  pm2_5: number;
+  noise: number;
+  humidity: number;
+  temperature: number;
+  pm10: number;
+  voltage: number;
+}
+
+interface EnviroUrbanJson {
+  readings: EnviroUrbanReadingsJson;
+  nickname: string;
+  model: string;
+  uid: string;
+  timestamp: string;
+}
 
 /**
- * Platform Accessory
- * An instance of this class is created for each accessory your platform registers
- * Each accessory may expose multiple services of different service types.
+ * Enviro Urban Accessory
+ * An instance of this class is created for each accessory registered (in this case only one)
+ * The Enviro Urban accessory exposes the services of temperature, air quality and humidity
  */
-export class ExamplePlatformAccessory {
-  private service: Service;
+export class EnviroUrbanSensor {
+  private airQualityService: Service;
+  private humidityService: Service;
+  private temperatureService: Service;
 
-  /**
-   * These are just used to create a working example
-   * You should implement your own code to track the state of your accessory
-   */
-  private exampleStates = {
-    On: false,
-    Brightness: 100,
+  private serialNumber = '';
+  private mqttTopic = '';
+
+  // Use to store the sensor data for quick retrieval
+  private sensorData = {
+    airQuality: this.platform.Characteristic.AirQuality.UNKNOWN,
+    temperature: -270,
+    humidity: 0,
+    P2: 0,
+    P1: 0,
   };
 
-  constructor(
-    private readonly platform: ExampleHomebridgePlatform,
-    private readonly accessory: PlatformAccessory,
-  ) {
-
-    // set accessory information
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Default-Manufacturer')
-      .setCharacteristic(this.platform.Characteristic.Model, 'Default-Model')
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, 'Default-Serial');
-
-    // get the LightBulb service if it exists, otherwise create a new LightBulb service
-    // you can create multiple services for each accessory
-    this.service = this.accessory.getService(this.platform.Service.Lightbulb) || this.accessory.addService(this.platform.Service.Lightbulb);
-
-    // set the service name, this is what is displayed as the default name on the Home app
-    // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
-    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.exampleDisplayName);
-
-    // each service must implement at-minimum the "required characteristics" for the given service type
-    // see https://developers.homebridge.io/#/service/Lightbulb
-
-    // register handlers for the On/Off Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this))                // SET - bind to the `setOn` method below
-      .onGet(this.getOn.bind(this));               // GET - bind to the `getOn` method below
-
-    // register handlers for the Brightness Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setBrightness.bind(this));       // SET - bind to the 'setBrightness` method below
-
-    /**
-     * Creating multiple services of the same type.
-     *
-     * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-     * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-     * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
-     *
-     * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
-     * can use the same sub type id.)
-     */
-
-    // Example: add two "motion sensor" services to the accessory
-    const motionSensorOneService = this.accessory.getService('Motion Sensor One Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor One Name', 'YourUniqueIdentifier-1');
-
-    const motionSensorTwoService = this.accessory.getService('Motion Sensor Two Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor Two Name', 'YourUniqueIdentifier-2');
-
-    /**
-     * Updating characteristics values asynchronously.
-     *
-     * Example showing how to update the state of a Characteristic asynchronously instead
-     * of using the `on('get')` handlers.
-     * Here we change update the motion sensor trigger states on and off every 10 seconds
-     * the `updateCharacteristic` method.
-     *
-     */
-    let motionDetected = false;
-    setInterval(() => {
-      // EXAMPLE - inverse the trigger
-      motionDetected = !motionDetected;
-
-      // push the new value to HomeKit
-      motionSensorOneService.updateCharacteristic(this.platform.Characteristic.MotionDetected, motionDetected);
-      motionSensorTwoService.updateCharacteristic(this.platform.Characteristic.MotionDetected, !motionDetected);
-
-      this.platform.log.debug('Triggering motionSensorOneService:', motionDetected);
-      this.platform.log.debug('Triggering motionSensorTwoService:', !motionDetected);
-    }, 10000);
-  }
+  private mqttClient: Client;
 
   /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
+   * Maps the JSON data received from the MQTT broker originating from the Enviro sensor to the internal structure we need
+   * @param jsonData the JSON data received from the MQTT broker
    */
-  async setOn(value: CharacteristicValue) {
-    // implement your own code to turn your device on/off
-    this.exampleStates.On = value as boolean;
+  mapJsonData(jsonData: EnviroUrbanJson): void {
+    this.sensorData.P1 = jsonData.readings.pm1;
+    this.sensorData.P2 = jsonData.readings.pm2_5;
+    this.sensorData.humidity = jsonData.readings.humidity;
+    this.sensorData.temperature = jsonData.readings.temperature;
+    this.serialNumber = jsonData.uid;
 
-    this.platform.log.debug('Set Characteristic On ->', value);
+    if (this.sensorData.P2 <= this.platform.config.excellent) {
+      this.sensorData.airQuality = this.platform.Characteristic.AirQuality.EXCELLENT;
+    } else if (this.sensorData.P2 > this.platform.config.excellent && this.sensorData.P2 <= this.platform.config.good) {
+      this.sensorData.airQuality = this.platform.Characteristic.AirQuality.GOOD;
+    } else if (this.sensorData.P2 > this.platform.config.good && this.sensorData.P2 <= this.platform.config.fair) {
+      this.sensorData.airQuality = this.platform.Characteristic.AirQuality.FAIR;
+    } else if (this.sensorData.P2 > this.platform.config.fair && this.sensorData.P2 <= this.platform.config.inferior) {
+      this.sensorData.airQuality = this.platform.Characteristic.AirQuality.INFERIOR;
+    } else if (this.sensorData.P2 > this.platform.config.poor) {
+      this.sensorData.airQuality = this.platform.Characteristic.AirQuality.POOR;
+    }
+  }
+
+  setAccessoryInfo(serialNumber: string): void {
+    // Only set the accessory info if the serial number has changed
+    if (this.serialNumber !== serialNumber) {
+      const accessoryInfo: Service | undefined = this.accessory.getService(this.platform.Service.AccessoryInformation);
+
+      if (accessoryInfo !== undefined) {
+        accessoryInfo.setCharacteristic(this.platform.Characteristic.Manufacturer, 'Pimoroni')
+          .setCharacteristic(this.platform.Characteristic.Model, 'EnviroUrban')
+          .setCharacteristic(this.platform.Characteristic.SerialNumber, serialNumber);
+      }
+    }
+  }
+
+  shutdown() {
+    this.platform.log.debug('Shutdown called. Unsubscribing from MQTT broker.');
+    this.mqttClient.unsubscribe(this.mqttTopic);
+    this.mqttClient.end();
+  }
+
+  constructor(
+    private readonly platform: EnviroUrbanPlatform,
+    private readonly accessory: PlatformAccessory,
+    private readonly displayName: string,
+    private readonly serial: string,
+    private readonly topic: string,
+  ) {
+
+    this.mqttTopic = topic;
+    this.setAccessoryInfo(serial);
+
+    this.airQualityService = this.accessory.getService(this.platform.Service.AirQualitySensor) ||
+      this.accessory.addService(this.platform.Service.AirQualitySensor);
+    this.temperatureService = this.accessory.getService(this.platform.Service.TemperatureSensor) ||
+      this.accessory.addService(this.platform.Service.TemperatureSensor);
+    this.humidityService = this.accessory.getService(this.platform.Service.HumiditySensor) ||
+      this.accessory.addService(this.platform.Service.HumiditySensor);
+
+    // set the service name, this is what is displayed as the default name on the Home app
+    this.airQualityService.setCharacteristic(this.platform.Characteristic.Name, 'Air Quality');
+    this.temperatureService.setCharacteristic(this.platform.Characteristic.Name, 'Temperature');
+    this.humidityService.setCharacteristic(this.platform.Characteristic.Name, 'Humidity');
+
+    // register handlers
+    this.airQualityService.getCharacteristic(this.platform.Characteristic.AirQuality)
+      .onGet(this.handleAirQualityGet.bind(this));
+    this.airQualityService.getCharacteristic(this.platform.Characteristic.PM10Density)
+      .onGet(this.handlePM10DensityGet.bind(this));
+    this.airQualityService.getCharacteristic(this.platform.Characteristic.PM2_5Density)
+      .onGet(this.handlePM2_5DensityGet.bind(this));
+    this.temperatureService.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
+      .onGet(this.handleTemperatureGet.bind(this));
+    this.humidityService.getCharacteristic(this.platform.Characteristic.CurrentRelativeHumidity)
+      .onGet(this.handleHumidityGet.bind(this));
+
+    // Connect to MQTT broker
+    const options = {
+      username: this.platform.config.username,
+      password: this.platform.config.password,
+    };
+
+    let brokerUrl = this.platform.config.mqttbroker;
+
+    // URL needs to include mqtt:// prefix
+    if (brokerUrl && !brokerUrl.includes('://')) {
+      brokerUrl = 'mqtt://' + brokerUrl;
+    }
+
+    this.platform.log.info('Connecting to MQTT broker...');
+    this.mqttClient = connect(brokerUrl, options);
+
+    this.mqttClient.on('message', (topic, message) => {
+      this.platform.log.debug(message.toString('utf-8'));
+      const enviroUrbanData: EnviroUrbanJson = JSON.parse(message.toString('utf-8'));
+      this.mapJsonData(enviroUrbanData);
+      this.setAccessoryInfo(enviroUrbanData.uid);
+    });
+
+    this.mqttClient.on('connect', () => {
+      this.platform.log.info('Connected to MQTT broker');
+
+      this.mqttClient.subscribe(this.mqttTopic, { qos: 0 }, (error, granted) => {
+        if (error) {
+          this.platform.log.error('Unable to connect to the MQTT broker: ' + error.name + ' ' + error.message);
+        } else {
+          // If we're re-connecting then the existing topic subscription should still be persisted.
+          if (granted.length > 0) {
+            this.platform.log.debug(granted[0].topic + ' was subscribed');
+          }
+        }
+      });
+    });
+
+    this.mqttClient.on('disconnect', () => {
+      this.platform.log.warn('Disconnected from MQTT broker');
+    });
+
+    this.mqttClient.on('error', (error) => {
+      this.platform.log.error('Problem with MQTT broker: ' + error.message);
+    });
   }
 
   /**
    * Handle the "GET" requests from HomeKit
-   * These are sent when HomeKit wants to know the current state of the accessory, for example, checking if a Light bulb is on.
-   *
-   * GET requests should return as fast as possbile. A long delay here will result in
-   * HomeKit being unresponsive and a bad user experience in general.
-   *
-   * If your device takes time to respond you should update the status of your device
-   * asynchronously instead using the `updateCharacteristic` method instead.
-
-   * @example
-   * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
+   * Here we use the locally stored data for performance reasons and also to avoid sending too many requests to the Enviro+ server
    */
-  async getOn(): Promise<CharacteristicValue> {
-    // implement your own code to check if the device is on
-    const isOn = this.exampleStates.On;
+  async handleAirQualityGet(): Promise<number> {
+    this.platform.log.debug('Air Quality ->', this.sensorData.airQuality);
 
-    this.platform.log.debug('Get Characteristic On ->', isOn);
-
-    // if you need to return an error to show the device as "Not Responding" in the Home app:
-    // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-
-    return isOn;
+    return this.sensorData.airQuality;
   }
 
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, changing the Brightness
-   */
-  async setBrightness(value: CharacteristicValue) {
-    // implement your own code to set the brightness
-    this.exampleStates.Brightness = value as number;
+  async handlePM10DensityGet(): Promise<number> {
+    this.platform.log.debug('PM10 Density ->', this.sensorData.P1);
 
-    this.platform.log.debug('Set Characteristic Brightness -> ', value);
+    return this.sensorData.P1;
   }
 
+  async handlePM2_5DensityGet(): Promise<number> {
+    this.platform.log.debug('PM2.5 Density ->', this.sensorData.P2);
+
+    return this.sensorData.P2;
+  }
+
+  async handleTemperatureGet(): Promise<number> {
+    this.platform.log.debug('Temperature ->', this.sensorData.temperature);
+
+    return this.sensorData.temperature;
+  }
+
+  async handleHumidityGet(): Promise<number> {
+    this.platform.log.debug('Humidity ->', this.sensorData.humidity);
+
+    return this.sensorData.humidity;
+  }
 }
