@@ -55,13 +55,14 @@ Add platform to `config.json`, for configuration see below.
 
 ## Plug-in Configuration
 
-The plug-in needs to know where to find the MQTT broker providing the JSON data (e.g. mqtt://127.0.0.1:1883) along with the serial number of the device to uniquely identify it (you can also use your Raspberry Pi identifier).
+The plug-in needs to know where to find the MQTT broker providing the JSON data (e.g. mqtt://127.0.0.1:1883) along with the serial number of the device to uniquely identify it (you can also use your Raspberry Pi Pico identifier).
 
 ```json
 {
   "platforms": [
     {
       "platform": "EnviroUrbanAirQuality",
+      "name": "EnviroUrban",
       "mqttbroker": "mqtt://127.0.0.1:1883",
       "username": "",
       "password": "",

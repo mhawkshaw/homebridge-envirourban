@@ -6,6 +6,11 @@
   "schema": {
     "type": "object",
     "properties": {
+      "name": {
+        "type": "string",
+        "title": "Plugin name as shown in Homebridge Log",
+        "default": "EnviroUrban"
+      },
       "mqttbroker": {
         "title": "MQTT Broker",
         "type": "string",
