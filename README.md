@@ -10,6 +10,8 @@
 
 This Homebridge plug-in allows you to make the data available from the [Pimoroni Enviro Urban](https://learn.pimoroni.com/article/getting-started-with-enviro) device.
 
+[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
+
 ## Setup MQTT broker
 
 This Homebridge plug-in reads the data from an MQTT broker providing the JSON information, for example:
