@@ -2,7 +2,7 @@ import { Service, PlatformAccessory } from 'homebridge';
 
 import { EnviroUrbanPlatform } from './platform';
 
-import { Client, connect } from 'mqtt';
+import { MqttClient, connect } from 'mqtt';
 
 interface EnviroUrbanReadingsJson {
   pressure: number;
@@ -38,14 +38,14 @@ export class EnviroUrbanSensor {
 
   // Use to store the sensor data for quick retrieval
   private sensorData = {
-    airQuality: this.platform.Characteristic.AirQuality.UNKNOWN,
+    airQuality: 0,
     temperature: -270,
     humidity: 0,
     P2: 0,
     P1: 0,
   };
 
-  private mqttClient: Client;
+  private mqttClient: MqttClient;
 
   /**
    * Maps the JSON data received from the MQTT broker originating from the Enviro sensor to the internal structure we need
@@ -156,7 +156,7 @@ export class EnviroUrbanSensor {
           this.platform.log.error('Unable to connect to the MQTT broker: ' + error.name + ' ' + error.message);
         } else {
           // If we're re-connecting then the existing topic subscription should still be persisted.
-          if (granted.length > 0) {
+          if (granted && granted.length > 0) {
             this.platform.log.debug(granted[0].topic + ' was subscribed');
           }
         }
