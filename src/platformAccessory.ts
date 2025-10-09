@@ -1,6 +1,6 @@
 import type { Service, PlatformAccessory } from 'homebridge';
 
-import type { EnviroUrbanPlatform } from './platform';
+import type { EnviroUrbanPlatform } from './platform.js';
 
 import { MqttClient, connect } from 'mqtt';
 

@@ -2,6 +2,7 @@
   "pluginAlias": "EnviroUrbanAirQuality",
   "pluginType": "platform",
   "singular": true,
+  "strictValidation": false,
   "headerDisplay": "The Pimoroni Enviro Urban Sensor provides environmental data.",
   "schema": {
     "type": "object",
